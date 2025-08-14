@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# ug4_install.sh — clone UG4 "ughub", create sibling "ug4", init ug4 via ../ughub/ughub,
-#                   then configure a Debug build (re-adding BLAS/LAPACK paths if CMake can't find them).
+# ug4_install.sh — clone UG4 "ughub", create sibling "ug4", init via ../ughub/ughub,
+#                  then configure CMake in ug4/build. Supports -mpi flag.
 #
 # Usage:
-#   ./ug4_install.sh [target_dir]
+#   ./ug4_install.sh [-mpi] [target_dir]
 # Examples:
-#   ./ug4_install.sh                 # clones into ./ughub, creates ./ug4, inits & cmake config
-#   ./ug4_install.sh ~/src/ughub     # clones into ~/src/ughub and creates ~/src/ug4
+#   ./ug4_install.sh                 # non-MPI build (PARALLEL=OFF)
+#   ./ug4_install.sh -mpi            # MPI build (PARALLEL=ON) using mpicc/mpicxx if available
+#   ./ug4_install.sh -mpi ~/src/ughub
 #
 # Optional env vars:
-#   USE_SSH=1                    # use SSH instead of HTTPS
+#   USE_SSH=1                    # use SSH instead of HTTPS for cloning
 #   CLONE_DEPTH=1                # shallow clone
 #   UGHUB_REPO_URL=...           # override repo URL (default UG4/ughub)
-#   UGHUB_BRANCH=main            # branch to checkout (defaults to default branch)
+#   UGHUB_BRANCH=main            # branch to checkout (defaults to repo default)
 #   LAPACK_LIB_OVERRIDE=...      # override LAPACK .so path for fallback cmake
 #   BLAS_LIB_OVERRIDE=...        # override BLAS .so path for fallback cmake
 
@@ -28,6 +29,30 @@ abspath() {
         ;;
   esac
 }
+find_tool() {
+  if command -v "$1" >/dev/null 2>&1; then
+    command -v "$1"
+  else
+    printf ''
+  fi
+}
+
+# ---- Args ------------------------------------------------------------------
+MPI_MODE=0
+TARGET_DIR=''
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -mpi) MPI_MODE=1; shift ;;
+    -h|--help)
+      sed -n '1,40p' "$0"; exit 0 ;;
+    -*)
+      msg "Unknown option: $1"; exit 2 ;;
+    *)
+      TARGET_DIR="$1"; shift ;;
+  esac
+done
+TARGET_DIR="${TARGET_DIR:-ughub}"
 
 # ---- Config ----------------------------------------------------------------
 if [[ "${USE_SSH:-0}" == "1" ]]; then
@@ -35,20 +60,17 @@ if [[ "${USE_SSH:-0}" == "1" ]]; then
 else
   REPO_URL="${UGHUB_REPO_URL:-https://github.com/UG4/ughub.git}"
 fi
-
-TARGET_DIR="${1:-ughub}"             # clone destination for the ughub repo (default: ./ughub)
 BRANCH_OPT=()
 [[ -n "${UGHUB_BRANCH:-}" ]] && BRANCH_OPT=(--branch "$UGHUB_BRANCH")
-
 CLONE_ARGS=()
 [[ -n "${CLONE_DEPTH:-}" ]] && CLONE_ARGS+=(--depth "$CLONE_DEPTH")
 
-# ---- Part 1/4: Clone the 'ughub' repository --------------------------------
-msg "Part 1/4: Cloning 'ughub' repository"
+# ---- Part 1/5: Clone the 'ughub' repository --------------------------------
+msg "Part 1/5: Cloning 'ughub' repository"
 msg "  Working directory:          $(abspath ".")"
 msg "  Repository URL:             $REPO_URL"
 msg "  Target clone directory:     $(abspath "$TARGET_DIR")"
-[[ ${#BRANCH_OPT[@]} -gt 0 ]] && msg "  Branch:                      ${UGHUB_BRANCH}"
+[[ ${#BRANCH_OPT[@]} -gt 0 ]] && msg "  Branch:                      ${UGHUB_BRANCH:-<repo default>}"
 [[ -n "${CLONE_DEPTH:-}" ]] && msg "  Shallow clone depth:         ${CLONE_DEPTH}"
 
 command -v git >/dev/null 2>&1 || { msg "ERROR: git is not installed."; exit 1; }
@@ -59,12 +81,12 @@ git clone "${CLONE_ARGS[@]}" "${BRANCH_OPT[@]}" "$REPO_URL" "$TARGET_DIR"
 msg "Clone complete."
 git -C "$TARGET_DIR" remote -v
 
-# ---- Part 2/4: Create sibling 'ug4' directory ------------------------------
+# ---- Part 2/5: Create sibling 'ug4' directory ------------------------------
 UG4_PARENT_DIR="$(dirname "$TARGET_DIR")"
 UG4_DIR="${UG4_PARENT_DIR%/}/ug4"
 [[ "$UG4_PARENT_DIR" == "." ]] && UG4_DIR="./ug4"
 
-msg "Part 2/4: Creating sibling 'ug4' directory"
+msg "Part 2/5: Creating sibling 'ug4' directory"
 msg "  Parent directory (of ughub): $(abspath "$UG4_PARENT_DIR")"
 msg "  ug4 directory to create:     $(abspath "$UG4_DIR")"
 
@@ -75,10 +97,10 @@ fi
 mkdir -p "$UG4_DIR"
 msg "Created (or already existed):  $(abspath "$UG4_DIR")"
 
-# Ensure ../ughub/ughub exists from inside ug4:
-# If user chose a different clone name, create a symlink named 'ughub' -> <actual clone dir>
+# Ensure ../ughub/ughub resolves even if clone dir isn't named "ughub"
 if [[ "$(basename "$TARGET_DIR")" != "ughub" ]]; then
-  ( cd "$UG4_PARENT_DIR"
+  (
+    cd "$UG4_PARENT_DIR"
     if [[ -e "ughub" && ! -L "ughub" && ! -d "ughub" ]]; then
       msg "ERROR: '$UG4_PARENT_DIR/ughub' exists and is not a directory/symlink."
       exit 1
@@ -90,13 +112,12 @@ if [[ "$(basename "$TARGET_DIR")" != "ughub" ]]; then
   )
 fi
 
-# ---- Part 3/4: Initialize ug4 via ../ughub/ughub ---------------------------
+# ---- Part 3/5: Initialize ug4 via ../ughub/ughub ---------------------------
 REL_UGHUB="../ughub/ughub"
-msg "Part 3/4: Initializing ug4 using relative path"
+msg "Part 3/5: Initializing ug4 using relative path"
 msg "  Changing directory to:       $(abspath "$UG4_DIR")"
 pushd "$UG4_DIR" >/dev/null
 
-# Prefer executing ../ughub/ughub directly; fall back to python3 if not executable
 if [[ -x "$REL_UGHUB" ]]; then
   UGHUB_CMD=( "$REL_UGHUB" )
 elif command -v python3 >/dev/null 2>&1; then
@@ -112,42 +133,86 @@ msg "-> Running: ${UGHUB_CMD[*]} init"
 msg "-> Running: ${UGHUB_CMD[*]} install Examples"
 "${UGHUB_CMD[@]}" install Examples
 
-# ---- Part 4/4: Configure CMake build in ug4/build --------------------------
-BUILD_DIR="build"
-msg "Part 4/4: Configuring CMake"
-msg "  Build directory:             $(abspath "$UG4_DIR/$BUILD_DIR")"
+# ---- Part 4/5: Select compilers (handles -mpi) -----------------------------
+PARALLEL_VAL="OFF"
+C_COMP=""
+CXX_COMP=""
 
+if [[ $MPI_MODE -eq 1 ]]; then
+  PARALLEL_VAL="ON"
+  msg "MPI mode requested (-mpi). Searching for MPI compilers..."
+
+  MPICC_PATH="$(find_tool mpicc || true)"
+  MPICXX_PATH="$(find_tool mpicxx || true)"
+  [[ -z "$MPICC_PATH" && -x /usr/bin/mpicc ]] && MPICC_PATH="/usr/bin/mpicc"
+  [[ -z "$MPICXX_PATH" && -x /usr/bin/mpicxx ]] && MPICXX_PATH="/usr/bin/mpicxx"
+
+  if [[ -n "$MPICC_PATH" && -n "$MPICXX_PATH" ]]; then
+    C_COMP="$MPICC_PATH"
+    CXX_COMP="$MPICXX_PATH"
+    msg "  Found MPI compilers:"
+    msg "    mpicc : $C_COMP"
+    msg "    mpicxx: $CXX_COMP"
+  else
+    msg "WARNING: MPI compilers not found. Falling back to non-MPI toolchain."
+  fi
+fi
+
+if [[ -z "${C_COMP:-}" || -z "${CXX_COMP:-}" ]]; then
+  C_COMP="$(find_tool gcc || true)"; CXX_COMP="$(find_tool g++ || true)"
+  if [[ -z "$C_COMP" || -z "$CXX_COMP" ]]; then
+    C_COMP="$(find_tool cc || true)"; CXX_COMP="$(find_tool c++ || true)"
+  fi
+  if [[ -z "$C_COMP" || -z "$CXX_COMP" ]]; then
+    msg "ERROR: Could not find a C/C++ compiler toolchain (gcc/g++ or cc/c++)."
+    exit 1
+  fi
+  if [[ $MPI_MODE -eq 1 ]]; then
+    msg "MPI not available; proceeding without MPI (PARALLEL=OFF)."
+    PARALLEL_VAL="OFF"
+  fi
+  msg "  Using fallback compilers:"
+  msg "    C  : $C_COMP"
+  msg "    C++: $CXX_COMP"
+fi
+
+# ---- Part 5/5: Configure CMake build in ug4/build --------------------------
+BUILD_DIR="build"
+msg "Configuring CMake in:          $(abspath "$UG4_DIR/$BUILD_DIR")"
 mkdir -p "$BUILD_DIR"
 pushd "$BUILD_DIR" >/dev/null
 
-# Base CMake args
-BASE_ARGS=(-DPARALLEL=OFF -DCMAKE_BUILD_TYPE=Debug -DConvectionDiffusion=ON ..)
+BASE_ARGS=(
+  -DPARALLEL="${PARALLEL_VAL}"
+  -DCMAKE_BUILD_TYPE=Debug
+  -DConvectionDiffusion=ON
+  ..
+)
+COMPILER_ARGS=(
+  -DCMAKE_C_COMPILER="${C_COMP}"
+  -DCMAKE_CXX_COMPILER="${CXX_COMP}"
+)
 
-# First attempt: no explicit BLAS/LAPACK
-msg "-> Running: cmake ${BASE_ARGS[*]}"
+msg "-> Running: cmake ${COMPILER_ARGS[*]} ${BASE_ARGS[*]}"
 set +e
-cmake "${BASE_ARGS[@]}" 2>&1 | tee cmake_first.log
+cmake "${COMPILER_ARGS[@]}" "${BASE_ARGS[@]}" 2>&1 | tee cmake_first.log
 CMAKE_RC=${PIPESTATUS[0]}
 set -e
 
-# Detect BLAS/LAPACK problems in output or non-zero rc
+# Retry if BLAS/LAPACK not found or non-zero rc
 if [[ $CMAKE_RC -ne 0 ]] || grep -Eq 'A library with BLAS API not found|No LAPACK package found|LAPACK requires BLAS' cmake_first.log; then
   LAPACK_LIB="${LAPACK_LIB_OVERRIDE:-/usr/lib/x86_64-linux-gnu/lapack/liblapack.so}"
   BLAS_LIB="${BLAS_LIB_OVERRIDE:-/usr/lib/x86_64-linux-gnu/libblas.so}"
-
   msg "CMake reported missing BLAS/LAPACK or failed. Retrying with explicit libraries:"
   msg "  LAPACK: $LAPACK_LIB"
   msg "  BLAS:   $BLAS_LIB"
-
-  # Second attempt with explicit libs
-  msg "-> Running: cmake ${BASE_ARGS[*]} -DUSER_LAPACK_LIBRARIES=\"$LAPACK_LIB\" -DUSER_BLAS_LIBRARIES=\"$BLAS_LIB\""
+  msg "-> Running: cmake ${COMPILER_ARGS[*]} ${BASE_ARGS[*]} -DUSER_LAPACK_LIBRARIES=\"$LAPACK_LIB\" -DUSER_BLAS_LIBRARIES=\"$BLAS_LIB\""
   set +e
-  cmake "${BASE_ARGS[@]}" \
+  cmake "${COMPILER_ARGS[@]}" "${BASE_ARGS[@]}" \
         -DUSER_LAPACK_LIBRARIES="$LAPACK_LIB" \
         -DUSER_BLAS_LIBRARIES="$BLAS_LIB" 2>&1 | tee cmake_with_blas_lapack.log
   CMAKE_RC2=${PIPESTATUS[0]}
   set -e
-
   if [[ $CMAKE_RC2 -ne 0 ]]; then
     msg "ERROR: CMake configuration still failed. See logs:"
     msg "  $(abspath cmake_first.log)"
@@ -162,4 +227,4 @@ fi
 
 popd >/dev/null   # leave build/
 popd >/dev/null   # leave ug4/
-msg "All done. ug4 initialized and CMake configured."
+msg "All done. ug4 initialized and CMake configured (PARALLEL=${PARALLEL_VAL})."
