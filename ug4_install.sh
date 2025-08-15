@@ -220,6 +220,7 @@ BASE_ARGS=(
   -DPARALLEL="${PARALLEL_VAL}"
   -DCMAKE_BUILD_TYPE=Debug
   -DConvectionDiffusion=ON
+  -DUSE_LUA2C=ON
 )
 if [[ $PROMESH_MODE -eq 1 ]]; then
   msg "ProMesh enabled (-promesh): adding -DProMesh=ON to CMake."
