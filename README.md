@@ -50,6 +50,7 @@ chmod +x ug4_install.sh
 ./ug4_install.sh -promesh     # enable ProMesh in CMake
 ./ug4_install.sh -neuro       # add NeuroBox source & packages; enable related CMake options
 ./ug4_install.sh -lu          # install SuperLU6 & vendor upstream SuperLU; enable -DSuperLU6=ON
+./ug4_install.sh -parmetis    # unpack Parmetis.tar -> ug4/plugins/Parmetis and enable -DParmetis=ON
 ```
 
 By default, the script clones `ughub/` into the current directory and creates a sibling `ug4/` directory next to it.
@@ -59,7 +60,7 @@ By default, the script clones `ughub/` into the current directory and creates a 
 ## Usage & Flags
 
 ```
-./ug4_install.sh [-mpi] [-promesh] [-neuro] [-lu] [target_dir]
+./ug4_install.sh [-mpi] [-promesh] [-neuro] [-lu] [-parmetis] [target_dir]
 ```
 
 - `-mpi` — prefer `mpicc/mpicxx`; sets `-DPARALLEL=ON` (falls back to gcc/g++ if MPI not found)
@@ -67,7 +68,7 @@ By default, the script clones `ughub/` into the current directory and creates a 
 - `-neuro` — adds NeuroBox source, installs `neuro_collection`, `cable_neuron`, `MembranePotentialMapping`; enables their CMake options
 - `-lu` — installs `SuperLU6`, vendors upstream **SuperLU** into `plugins/SuperLU6/external/superlu`, and adds `-DSuperLU6=ON`
 - `target_dir` — destination for the `ughub` clone (default: `./ughub`)
-
+- `-parmetis` — expects **`Parmetis.tar`** in the directory you run the script from; extracts it to **`ug4/plugins/Parmetis/`** and enables **`-DParmetis=ON`** (the script also adds **`-DPCL_DEBUG_BARRIER=ON`** for extra debug barriers). 
 ---
 
 ## What the Script Does (Step-by-Step)
@@ -101,6 +102,12 @@ If `-lu` is passed:
   - `git clone https://github.com/xiaoyeli/superlu.git superlu`
 
 The CMake step later enables `-DSuperLU6=ON`.
+
+### 5b) *(Optional)* ParMETIS from tar (`-parmetis`)
+If `-parmetis` is passed:
+- The script looks for `Parmetis.tar` in the directory you launched the script from, extracts it under `ug4/plugins/Parmetis/`, and normalizes the folder name if needed. 
+- The CMake step adds `-DParmetis=ON` (and `-DPCL_DEBUG_BARRIER=ON`).  
+- *Note:* This does **not** automatically enable MPI/parallel; combine with `-mpi` if you also want a parallel build.
 
 ### 6) Compiler selection & MPI (`-mpi`)
 - If `-mpi` is passed, the script tries `mpicc`/`mpicxx` (PATH or `/usr/bin`), prints the paths if found, **and sets `-DPARALLEL=ON`**.
@@ -145,6 +152,9 @@ Creates a base list of options to pass to `cmake`:
 - `-DConvectionDiffusion=ON`  
   Enables the **Convection-Diffusion** plugin/module in UG4 (e.g., PDE solvers for transport/heat-like equations).
 
+- `-DUSE_LUA2C=ON`  
+  Enables Lua-to-C embedding support so Lua scripts can be converted into C and compiled into plugins/binaries during the build. The script sets this **ON by default**.
+
 - `-DProMesh=ON` *(with `-promesh`)*  
   Enables **ProMesh** (UG4’s mesh processing/GUI tooling) in the build.
 
@@ -156,6 +166,9 @@ Creates a base list of options to pass to `cmake`:
 
 - `-DUSER_LAPACK_LIBRARIES=…`, `-DUSER_BLAS_LIBRARIES=…`  
   Explicitly points CMake to your system’s LAPACK/BLAS shared libraries when automatic detection fails (Debian/Ubuntu default paths are provided in the script).
+
+- `-DParmetis=ON` *(with `-parmetis`)*  
+  Enables the ParMETIS plugin after placing the sources under `ug4/plugins/Parmetis/` from `Parmetis.tar`. The script also passes `-DPCL_DEBUG_BARRIER=ON` alongside this flag.
 
 ---
 

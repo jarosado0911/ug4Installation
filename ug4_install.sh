@@ -6,9 +6,10 @@
 #   -promesh   → add -DProMesh=ON to CMake
 #   -neuro     → add NeuroBox source, install packages, enable neuro CMake flags
 #   -lu        → install SuperLU6 plugin and clone upstream SuperLU into external/superlu
+#   -parmetis  → extract Parmetis.tar (from script start dir) into ug4/plugins/ as 'Parmetis', enable -DParmetis=ON
 #
 # Usage:
-#   ./ug4_install.sh [-mpi] [-promesh] [-neuro] [-lu] [target_dir]
+#   ./ug4_install.sh [-mpi] [-promesh] [-neuro] [-lu] [-parmetis] [target_dir]
 #
 # Optional env vars:
 #   USE_SSH=1                    # use SSH instead of HTTPS for cloning
@@ -38,21 +39,26 @@ find_tool() {
   fi
 }
 
+# Remember where we started (repo root containing Parmetis.tar)
+START_DIR="$(abspath ".")"
+
 # ---- Args ------------------------------------------------------------------
 MPI_MODE=0
 PROMESH_MODE=0
 NEURO_MODE=0
 LU_MODE=0
+PARMETIS_MODE=0
 TARGET_DIR=''
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -mpi)     MPI_MODE=1; shift ;;
-    -promesh) PROMESH_MODE=1; shift ;;
-    -neuro)   NEURO_MODE=1; shift ;;
-    -lu)      LU_MODE=1; shift ;;
+    -mpi)       MPI_MODE=1; shift ;;
+    -promesh)   PROMESH_MODE=1; shift ;;
+    -neuro)     NEURO_MODE=1; shift ;;
+    -lu)        LU_MODE=1; shift ;;
+    -parmetis)  PARMETIS_MODE=1; shift ;;
     -h|--help)
-      sed -n '1,140p' "$0"; exit 0 ;;
+      sed -n '1,160p' "$0"; exit 0 ;;
     -*)
       msg "Unknown option: $1"; exit 2 ;;
     *)
@@ -72,8 +78,8 @@ BRANCH_OPT=()
 CLONE_ARGS=()
 [[ -n "${CLONE_DEPTH:-}" ]] && CLONE_ARGS+=(--depth "$CLONE_DEPTH")
 
-# ---- Part 1/8: Clone the 'ughub' repository --------------------------------
-msg "Part 1/8: Cloning 'ughub' repository"
+# ---- Part 1/9: Clone the 'ughub' repository --------------------------------
+msg "Part 1/9: Cloning 'ughub' repository"
 msg "  Working directory:          $(abspath ".")"
 msg "  Repository URL:             $REPO_URL"
 msg "  Target clone directory:     $(abspath "$TARGET_DIR")"
@@ -88,12 +94,12 @@ git clone "${CLONE_ARGS[@]}" "${BRANCH_OPT[@]}" "$REPO_URL" "$TARGET_DIR"
 msg "Clone complete."
 git -C "$TARGET_DIR" remote -v
 
-# ---- Part 2/8: Create sibling 'ug4' directory ------------------------------
+# ---- Part 2/9: Create sibling 'ug4' directory ------------------------------
 UG4_PARENT_DIR="$(dirname "$TARGET_DIR")"
 UG4_DIR="${UG4_PARENT_DIR%/}/ug4"
 [[ "$UG4_PARENT_DIR" == "." ]] && UG4_DIR="./ug4"
 
-msg "Part 2/8: Creating sibling 'ug4' directory"
+msg "Part 2/9: Creating sibling 'ug4' directory"
 msg "  Parent directory (of ughub): $(abspath "$UG4_PARENT_DIR")"
 msg "  ug4 directory to create:     $(abspath "$UG4_DIR")"
 
@@ -119,9 +125,9 @@ if [[ "$(basename "$TARGET_DIR")" != "ughub" ]]; then
   )
 fi
 
-# ---- Part 3/8: Initialize ug4 via ../ughub/ughub ---------------------------
+# ---- Part 3/9: Initialize ug4 via ../ughub/ughub ---------------------------
 REL_UGHUB="../ughub/ughub"
-msg "Part 3/8: Initializing ug4 using relative path"
+msg "Part 3/9: Initializing ug4 using relative path"
 msg "  Changing directory to:       $(abspath "$UG4_DIR")"
 pushd "$UG4_DIR" >/dev/null
 
@@ -140,7 +146,7 @@ msg "-> Running: ${UGHUB_CMD[*]} init"
 msg "-> Running: ${UGHUB_CMD[*]} install Examples"
 "${UGHUB_CMD[@]}" install Examples
 
-# ---- Part 4/8: NeuroBox (handles -neuro) -----------------------------------
+# ---- Part 4/9: NeuroBox (handles -neuro) -----------------------------------
 if [[ $NEURO_MODE -eq 1 ]]; then
   msg "Neuro mode enabled (-neuro): adding NeuroBox source and installing packages."
   msg "-> Running: ${UGHUB_CMD[*]} addsource neurobox https://github.com/NeuroBox3D/neurobox-packages.git"
@@ -150,7 +156,7 @@ if [[ $NEURO_MODE -eq 1 ]]; then
   "${UGHUB_CMD[@]}" install neuro_collection cable_neuron MembranePotentialMapping
 fi
 
-# ---- Part 5/8: SuperLU6 (handles -lu) --------------------------------------
+# ---- Part 5/9: SuperLU6 (handles -lu) --------------------------------------
 if [[ $LU_MODE -eq 1 ]]; then
   msg "SuperLU mode enabled (-lu): installing SuperLU6 and wiring external source."
   msg "-> Running: ${UGHUB_CMD[*]} install SuperLU6"
@@ -172,7 +178,54 @@ if [[ $LU_MODE -eq 1 ]]; then
   popd >/dev/null
 fi
 
-# ---- Part 6/8: Select compilers (handles -mpi) -----------------------------
+# ---- Part 6/9: Parmetis from tar (handles -parmetis) -----------------------
+if [[ $PARMETIS_MODE -eq 1 ]]; then
+  TAR_PATH="$START_DIR/Parmetis.tar"
+  msg "ParMETIS requested (-parmetis). Expecting tar: $TAR_PATH"
+  command -v tar >/dev/null 2>&1 || { msg "ERROR: 'tar' not found."; exit 1; }
+  [[ -f "$TAR_PATH" ]] || { msg "ERROR: Parmetis.tar not found at $TAR_PATH"; exit 1; }
+
+  PLUGINS_DIR="plugins"
+  DEST_DIR="$PLUGINS_DIR/Parmetis"
+  TMP_EXTRACT="$PLUGINS_DIR/.parmetis_extract_$$"
+
+  mkdir -p "$PLUGINS_DIR"
+  # Clean any previous copies
+  [[ -e "$DEST_DIR" ]] && { msg "  Removing existing $DEST_DIR"; rm -rf "$DEST_DIR"; }
+  [[ -e "$PLUGINS_DIR/ParMETIS" ]] && { msg "  Removing existing $PLUGINS_DIR/ParMETIS"; rm -rf "$PLUGINS_DIR/ParMETIS"; }
+  rm -rf "$TMP_EXTRACT"
+  mkdir -p "$TMP_EXTRACT"
+
+  msg "  Extracting Parmetis.tar into $TMP_EXTRACT"
+  tar -xf "$TAR_PATH" -C "$TMP_EXTRACT"
+
+  # Find what got extracted
+  shopt -s nullglob
+  extracted=( "$TMP_EXTRACT"/* )
+  shopt -u nullglob
+
+  if [[ ${#extracted[@]} -eq 1 && -d "${extracted[0]}" ]]; then
+    # Single top-level directory: move/rename it to Parmetis
+    msg "  Using extracted directory: $(basename "${extracted[0]}") → Parmetis"
+    mv "${extracted[0]}" "$DEST_DIR"
+  else
+    # Mixed contents or multiple directories: consolidate into Parmetis/
+    msg "  Multiple/mixed contents; consolidating into $DEST_DIR"
+    mkdir -p "$DEST_DIR"
+    mv "$TMP_EXTRACT"/* "$DEST_DIR"/ || true
+  fi
+  rm -rf "$TMP_EXTRACT"
+
+  # Safety: normalize any ParMETIS-cased folder to Parmetis
+  if [[ -d "$PLUGINS_DIR/ParMETIS" && ! -d "$DEST_DIR" ]]; then
+    mv "$PLUGINS_DIR/ParMETIS" "$DEST_DIR"
+  fi
+
+  [[ -d "$DEST_DIR" ]] || { msg "ERROR: Failed to place Parmetis under $PLUGINS_DIR"; exit 1; }
+  msg "  Parmetis plugin ready at: $(abspath "$DEST_DIR")"
+fi
+
+# ---- Part 7/9: Select compilers (handles -mpi) -----------------------------
 PARALLEL_VAL="OFF"
 C_COMP=""
 CXX_COMP=""
@@ -215,7 +268,7 @@ if [[ -z "${C_COMP:-}" || -z "${CXX_COMP:-}" ]]; then
   msg "    C++: $CXX_COMP"
 fi
 
-# ---- Part 7/8: Prepare CMake args (handles -promesh, -neuro) ---------------
+# ---- Part 8/9: Prepare CMake args (handles -promesh, -neuro, -lu, -parmetis)-
 BASE_ARGS=(
   -DPARALLEL="${PARALLEL_VAL}"
   -DCMAKE_BUILD_TYPE=Debug
@@ -230,9 +283,13 @@ if [[ $NEURO_MODE -eq 1 ]]; then
   msg "Neuro options enabled (-neuro): adding Neuro-related CMake flags."
   BASE_ARGS+=(-Dneuro_collection=ON -Dcable_neuron=ON -DMembranePotentialMapping=ON)
 fi
-if [[ $LU_MODE     -eq 1 ]]; then
-  msg "SuperLU option enabled (-lu): adding SuperLU Cmake flag."
+if [[ $LU_MODE -eq 1 ]]; then
+  msg "SuperLU option enabled (-lu): adding SuperLU CMake flag."
   BASE_ARGS+=(-DSuperLU6=ON)
+fi
+if [[ $PARMETIS_MODE -eq 1 ]]; then
+  msg "Parmetis enabled (-parmetis): adding -DParmetis=ON."
+  BASE_ARGS+=(-DParmetis=ON -DPCL_DEBUG_BARRIER=ON)
 fi
 
 COMPILER_ARGS=(
@@ -240,7 +297,7 @@ COMPILER_ARGS=(
   -DCMAKE_CXX_COMPILER="${CXX_COMP}"
 )
 
-# ---- Part 8/8: Configure CMake build in ug4/build --------------------------
+# ---- Part 9/9: Configure CMake build in ug4/build --------------------------
 BUILD_DIR="build"
 msg "Configuring CMake in:          $(abspath "$UG4_DIR/$BUILD_DIR")"
 mkdir -p "$BUILD_DIR"
@@ -283,4 +340,4 @@ fi
 
 popd >/dev/null   # leave build/
 popd >/dev/null   # leave ug4/
-msg "All done. ug4 initialized and CMake configured (PARALLEL=${PARALLEL_VAL}, ProMesh=$([[ $PROMESH_MODE -eq 1 ]] && echo ON || echo OFF), Neuro=$([[ $NEURO_MODE -eq 1 ]] && echo ON || echo OFF), SuperLU=$([[ $LU_MODE -eq 1 ]] && echo ON || echo OFF))."
+msg "All done. ug4 initialized and CMake configured (PARALLEL=${PARALLEL_VAL}, ProMesh=$([[ $PROMESH_MODE -eq 1 ]] && echo ON || echo OFF), Neuro=$([[ $NEURO_MODE -eq 1 ]] && echo ON || echo OFF), SuperLU=$([[ $LU_MODE -eq 1 ]] && echo ON || echo OFF), Parmetis=$([[ $PARMETIS_MODE -eq 1 ]] && echo ON || echo OFF))."
