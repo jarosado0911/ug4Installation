@@ -67,7 +67,7 @@ By default, the script clones `ughub/` into the current directory and creates a 
 - `-neuro` — adds NeuroBox source, installs `neuro_collection`, `cable_neuron`, `MembranePotentialMapping`; enables their CMake options
 - `-lu` — installs `SuperLU6`, vendors upstream **SuperLU** into `plugins/SuperLU6/external/superlu`, and adds `-DSuperLU6=ON`
 - `target_dir` — destination for the `ughub` clone (default: `./ughub`)
-`-parmetis` — expects **`Parmetis.tar`** in the directory you run the script from; extracts it to **`ug4/plugins/Parmetis/`** and enables **`-DParmetis=ON`** (the script also adds **`-DPCL_DEBUG_BARRIER=ON`** for extra debug barriers). 
+- `-parmetis` — expects **`Parmetis.tar`** in the directory you run the script from; extracts it to **`ug4/plugins/Parmetis/`** and enables **`-DParmetis=ON`** (the script also adds **`-DPCL_DEBUG_BARRIER=ON`** for extra debug barriers). 
 ---
 
 ## What the Script Does (Step-by-Step)
