@@ -50,6 +50,7 @@ chmod +x ug4_install.sh
 ./ug4_install.sh -promesh     # enable ProMesh in CMake
 ./ug4_install.sh -neuro       # add NeuroBox source & packages; enable related CMake options
 ./ug4_install.sh -lu          # install SuperLU6 & vendor upstream SuperLU; enable -DSuperLU6=ON
+./ug4_install.sh -parmetis    # unpack Parmetis.tar -> ug4/plugins/Parmetis and enable -DParmetis=ON
 ```
 
 By default, the script clones `ughub/` into the current directory and creates a sibling `ug4/` directory next to it.
@@ -101,6 +102,12 @@ If `-lu` is passed:
   - `git clone https://github.com/xiaoyeli/superlu.git superlu`
 
 The CMake step later enables `-DSuperLU6=ON`.
+
+### 5b) *(Optional)* ParMETIS from tar (`-parmetis`)
+If `-parmetis` is passed:
+- The script looks for `Parmetis.tar` in the directory you launched the script from, extracts it under `ug4/plugins/Parmetis/`, and normalizes the folder name if needed. 
+- The CMake step adds `-DParmetis=ON` (and `-DPCL_DEBUG_BARRIER=ON`).  
+- *Note:* This does **not** automatically enable MPI/parallel; combine with `-mpi` if you also want a parallel build.
 
 ### 6) Compiler selection & MPI (`-mpi`)
 - If `-mpi` is passed, the script tries `mpicc`/`mpicxx` (PATH or `/usr/bin`), prints the paths if found, **and sets `-DPARALLEL=ON`**.
