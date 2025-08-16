@@ -152,6 +152,9 @@ Creates a base list of options to pass to `cmake`:
 - `-DConvectionDiffusion=ON`  
   Enables the **Convection-Diffusion** plugin/module in UG4 (e.g., PDE solvers for transport/heat-like equations).
 
+- `-DUSE_LUA2C=ON`  
+  Enables Lua-to-C embedding support so Lua scripts can be converted into C and compiled into plugins/binaries during the build. The script sets this **ON by default**.
+
 - `-DProMesh=ON` *(with `-promesh`)*  
   Enables **ProMesh** (UG4’s mesh processing/GUI tooling) in the build.
 
@@ -163,6 +166,9 @@ Creates a base list of options to pass to `cmake`:
 
 - `-DUSER_LAPACK_LIBRARIES=…`, `-DUSER_BLAS_LIBRARIES=…`  
   Explicitly points CMake to your system’s LAPACK/BLAS shared libraries when automatic detection fails (Debian/Ubuntu default paths are provided in the script).
+
+- `-DParmetis=ON` *(with `-parmetis`)*  
+  Enables the ParMETIS plugin after placing the sources under `ug4/plugins/Parmetis/` from `Parmetis.tar`. The script also passes `-DPCL_DEBUG_BARRIER=ON` alongside this flag.
 
 ---
 
