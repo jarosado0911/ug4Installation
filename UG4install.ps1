@@ -4,6 +4,11 @@
 # - Creates missing directories
 # - Stops on errors
 # - Adds ughub to PATH (current session + persists to User PATH)
+# - NEW: -lu flag installs SuperLU6 and wires external/superlu, adds -DSuperLU6=ON to CMake
+
+param(
+    [switch]$lu  # pass -lu to install & enable SuperLU6
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -26,12 +31,15 @@ function Add-ToUserPath {
 }
 
 # --- Directories ---
-$HomeDir   = $HOME
-$UghubDir  = Join-Path $HomeDir 'ughub'
-$Ug4Dir    = Join-Path $HomeDir 'ug4'
-$PluginsDir= Join-Path $Ug4Dir 'plugins'
-$AppsDir   = Join-Path $Ug4Dir 'apps'
-$BuildDir  = Join-Path $Ug4Dir 'build'
+$HomeDir    = $HOME
+$UghubDir   = Join-Path $HomeDir 'ughub'
+$Ug4Dir     = Join-Path $HomeDir 'ug4'
+$PluginsDir = Join-Path $Ug4Dir 'plugins'
+$AppsDir    = Join-Path $Ug4Dir 'apps'
+$BuildDir   = Join-Path $Ug4Dir 'build'
+
+# SuperLU6 external dir (used when -lu is passed)
+$SuperLUExternalDir = Join-Path $PluginsDir 'SuperLU6\external'
 
 try {
     Write-Host "Changing directory to HOME: $HomeDir"
@@ -80,19 +88,65 @@ try {
     Set-Location $AppsDir
     ughub install cable_neuron_app calciumDynamics_app MembranePotentialMapping_app
 
+    # --- OPTIONAL: SuperLU6 (-lu) ---
+    if ($lu) {
+        Write-Host "(-lu) Installing SuperLU6 plugin (from ug4 root) and wiring external/superlu ..." -ForegroundColor Cyan
+        # Run ughub from ug4 root using relative path to sibling ughub script
+        Set-Location $Ug4Dir
+        $ughubRel = "..\ughub\ughub"
+        if (-not (Test-Path $ughubRel)) {
+            throw "Expected ughub script at '$ughubRel' relative to '$Ug4Dir' but it was not found."
+        }
+
+        & $ughubRel install SuperLU6
+
+        # Ensure external dir exists
+        New-Item -ItemType Directory -Force -Path $SuperLUExternalDir | Out-Null
+        Set-Location $SuperLUExternalDir
+
+        # Remove any existing 'superlu' folder
+        $superluPath = Join-Path $SuperLUExternalDir 'superlu'
+        if (Test-Path $superluPath) {
+            Write-Host "Removing existing '$superluPath' ..."
+            Remove-Item -Recurse -Force $superluPath
+        }
+
+        # Clone upstream SuperLU into external/superlu
+        Write-Host "Cloning upstream SuperLU into '$superluPath' ..."
+        git clone https://github.com/xiaoyeli/superlu.git superlu
+    }
+
     # --- Configure build ---
     Write-Host "Creating build directory: $BuildDir"
     New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
     Set-Location $BuildDir
 
-    Write-Host "Configuring UG4 with CMake (Release, static, embedded plugins, no BLAS/LAPACK) ..."
-    cmake -DDIM=ALL -DCPU=1 -DSTATIC_BUILD=ON -DCMAKE_BUILD_TYPE=Release -DLAPACK=OFF -DBLAS=OFF -DEMBEDDED_PLUGINS=ON -DConvectionDiffusion=ON -Dneuro_collection=ON -Dcable_neuron=ON -DMembranePotentialMapping=ON ..
+    # Build CMake flag list; append -DSuperLU6=ON if -lu is set
+    $cmakeFlags = @(
+        '-DDIM=ALL',
+        '-DCPU=1',
+        '-DSTATIC_BUILD=ON',
+        '-DCMAKE_BUILD_TYPE=Release',
+        '-DLAPACK=OFF',
+        '-DBLAS=OFF',
+        '-DEMBEDDED_PLUGINS=ON',
+        '-DConvectionDiffusion=ON',
+        '-Dneuro_collection=ON',
+        '-Dcable_neuron=ON',
+        '-DMembranePotentialMapping=ON'
+    )
+    if ($lu) {
+        $cmakeFlags += '-DSuperLU6=ON'
+    }
+
+    Write-Host "Configuring UG4 with CMake (Release) ..." -ForegroundColor Cyan
+    cmake @cmakeFlags ..
 
     # Build with Visual Studio (via CMake), using 4 parallel processes
     Write-Host "Building solution (Release) with 4 parallel processes via CMake/MSBuild..."
-    cmake --build "$BuildDir" --config Release -- /m:4
+    cmake --build "$BuildDir" --config Release -- /m:6
 
-    Write-Host "All steps completed. You can now build UG4 from: $BuildDir" -ForegroundColor Green
+    Write-Host "All steps completed. You can now build/run UG4 from: $BuildDir" -ForegroundColor Green
 }
 catch {
     Write-Host "ERROR: $($_.Exception.Message)" -ForegroundColor Red
