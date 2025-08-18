@@ -5,9 +5,11 @@
 # - Stops on errors
 # - Adds ughub to PATH (current session + persists to User PATH)
 # - NEW: -lu flag installs SuperLU6 and wires external/superlu, adds -DSuperLU6=ON to CMake
+# - NEW: -promesh flag adds -DProMesh=ON to CMake
 
 param(
-    [switch]$lu  # pass -lu to install & enable SuperLU6
+    [switch]$lu,        # pass -lu to install & enable SuperLU6
+    [switch]$promesh    # pass -promesh to enable ProMesh build (-DProMesh=ON)
 )
 
 $ErrorActionPreference = 'Stop'
@@ -121,7 +123,7 @@ try {
     New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
     Set-Location $BuildDir
 
-    # Build CMake flag list; append -DSuperLU6=ON if -lu is set
+    # Build CMake flag list; append -DSuperLU6=ON if -lu is set; -DProMesh=ON if -promesh is set
     $cmakeFlags = @(
         '-DDIM=ALL',
         '-DCPU=1',
@@ -135,8 +137,14 @@ try {
         '-Dcable_neuron=ON',
         '-DMembranePotentialMapping=ON'
     )
+
     if ($lu) {
+        Write-Host "(-lu) Enabling SuperLU6: adding -DSuperLU6=ON to CMake flags." -ForegroundColor Cyan
         $cmakeFlags += '-DSuperLU6=ON'
+    }
+    if ($promesh) {
+        Write-Host "(-promesh) Enabling ProMesh: adding -DProMesh=ON to CMake flags." -ForegroundColor Cyan
+        $cmakeFlags += '-DProMesh=ON'
     }
 
     Write-Host "Configuring UG4 with CMake (Release) ..." -ForegroundColor Cyan
