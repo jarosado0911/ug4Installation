@@ -5,6 +5,36 @@
 	- Windows
 ---
 
+# System Information
+Below is the system information execute in PowerShell: `.\pssyteminfo.ps1`
+```
+=== System Information Report ===
+--- Operating System ---
+OsName            : Microsoft Windows 11 Home
+OsArchitecture    : 64-bit
+WindowsVersion    : 2009
+WindowsBuildLabEx : 22621.1.amd64fre.ni_release.220506-1250
+--- CPU Information ---
+Name                      : Intel(R) Core(TM) i7-10870H CPU @ 2.20GHz
+NumberOfCores             : 8
+NumberOfLogicalProcessors : 16
+MaxClockSpeed             : 2208
+--- RAM Information ---
+Manufacturer CapacityGB SpeedMHz
+------------ ---------- --------
+Micron       8.00           3200
+Micron       8.00           3200
+Total Installed RAM: 16.00 GB
+--- GPU Information ---
+Name                               DriverVersion AdapterRAM
+----                               ------------- ----------
+NVIDIA GeForce RTX 3070 Laptop GPU 32.0.15.7683  4293918720
+Intel(R) UHD Graphics              31.0.101.2134 1073741824
+--- Visual Studio Compilers ---
+Visual C++ Compiler found: C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.29.30133
+=== Report Complete ===
+```
+
 # UG4 Installer (`ug4_install.sh`)
 
 This script automates setting up a UG4 workspace using **ughub**, prepares an `ug4/` working directory, initializes packages, and configures a build with CMake. It supports optional flags to enable **MPI**, **ProMesh**, **NeuroBox** packages, and **SuperLU6**.
